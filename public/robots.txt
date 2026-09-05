@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Future production domain; activate its sitemap after domain launch.
+# Sitemap: https://shixiaoshi0417.com/sitemap.xml
