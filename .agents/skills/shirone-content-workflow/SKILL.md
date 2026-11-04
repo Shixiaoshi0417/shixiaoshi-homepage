@@ -36,7 +36,7 @@ description: Operate Shirone content separation and dual-repository workflows af
 3. **工作区安全重置**：
    - 清理代码仓中已物化的所有外部文章与配置，安全恢复为主题初始 Demo 状态：`pnpm.cmd content:clean`。
 4. **双仓 CI/CD 运维与排错**：
-   - 维护内容仓触发脚本（`trigger-build.yml.example`）与代码仓 `.github/workflows/deploy.yml.example`、`.github/workflows/content-validate.yml` 的跨仓调度、构建凭据、并发截断与版本回滚。
+   - 本个人站暂未提交 GitHub Actions 工作流。跨仓调度、构建凭据、并发截断与版本回滚的上游设计见 `docs/content-separation/dual-repo-ci.md`；添加或启用自动化前，先获得用户明确授权。
 
 ## CLI 核心工具链
 
