@@ -135,7 +135,7 @@ test("Swup navigation, active link and browser history", async ({ page }) => {
 		"aria-current",
 		"page",
 	);
-	await page.locator('#navbar a[href="/about/"]').click();
+	await page.locator('#navbar .top-app-bar__nav-link[href="/about/"]').click();
 	await expect(page.locator("#swup-container")).toHaveAttribute(
 		"data-current-page",
 		"about",
@@ -222,9 +222,9 @@ for (const width of [390, 1440]) {
 		await expect(result).toBeVisible();
 		await result.click();
 		await expect(page).toHaveURL(/\/posts\/nekokem\//);
-		await expect(page.locator("#swup-container h1").first()).toContainText(
-			"NekoKEM",
-		);
+		await expect(
+			page.locator('#swup-container [data-pagefind-meta="title"]'),
+		).toContainText("NekoKEM");
 		await expect(panel).toHaveClass(/float-panel-closed/);
 		await expect(panel).toHaveCSS("opacity", "0");
 		await ready(page);
@@ -240,18 +240,18 @@ for (const width of [390, 1440]) {
 		await nextInput.fill("LunexSU");
 		await panel.locator('a[href*="/posts/lunexsu/"]').first().press("Enter");
 		await expect(page).toHaveURL(/\/posts\/lunexsu\//);
-		await expect(page.locator("#swup-container h1").first()).toContainText(
-			"LunexSU",
-		);
+		await expect(
+			page.locator('#swup-container [data-pagefind-meta="title"]'),
+		).toContainText("LunexSU");
 		await expect(panel).toHaveClass(/float-panel-closed/);
 		await ready(page);
 		await openSearch(page, width < 1024);
 		await expect(panel).not.toHaveClass(/float-panel-closed/);
 		await page.goBack();
 		await expect(page).toHaveURL(/\/posts\/nekokem\//);
-		await expect(page.locator("#swup-container h1").first()).toContainText(
-			"NekoKEM",
-		);
+		await expect(
+			page.locator('#swup-container [data-pagefind-meta="title"]'),
+		).toContainText("NekoKEM");
 		await expect(panel).toHaveClass(/float-panel-closed/);
 		await ready(page);
 		await openSearch(page, width < 1024);
@@ -344,7 +344,7 @@ test("late Pagefind initialization cannot restart a dismissed search", async ({
 	await expect(
 		page.locator('#search-panel a[href*="/posts/nekokem/"]').first(),
 	).toBeVisible();
-	await page.locator('#navbar a[href="/about/"]').click();
+	await page.locator('#navbar .top-app-bar__nav-link[href="/about/"]').click();
 	await expect(page.locator("#swup-container")).toHaveAttribute(
 		"data-current-page",
 		"about",
