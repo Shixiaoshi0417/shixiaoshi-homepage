@@ -15,6 +15,8 @@ async function ready(page: Page) {
 	);
 	await page.evaluate(() => document.fonts.ready);
 	await page.locator("#scheme-switch").waitFor();
+	await page.waitForFunction(() => !!window.swup);
+	await expect(page.locator("html")).not.toHaveClass(/is-changing/);
 }
 
 async function noOverflow(page: Page) {
@@ -86,19 +88,23 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
 		await ready(page);
 		await noOverflow(page);
 		expect(
-			await page
-				.locator("img")
-				.evaluateAll((images) =>
-					images
-						.filter(
-							(image) =>
-								image.getBoundingClientRect().width > 0 &&
-								image.getBoundingClientRect().top < window.innerHeight &&
-								image.getBoundingClientRect().bottom > 0 &&
-								(!image.complete || image.naturalWidth === 0),
-						)
-						.map((image) => image.src),
-				),
+			await page.locator("img").evaluateAll((images) =>
+				images
+					.filter(
+						(image) =>
+							// Ignore transparent banner buffers, but still check every
+							// image that is actually painted in the viewport.
+							image.checkVisibility({
+								checkOpacity: true,
+								checkVisibilityCSS: true,
+							}) &&
+							image.getBoundingClientRect().width > 0 &&
+							image.getBoundingClientRect().top < window.innerHeight &&
+							image.getBoundingClientRect().bottom > 0 &&
+							(!image.complete || image.naturalWidth === 0),
+					)
+					.map((image) => image.src),
+			),
 		).toEqual([]);
 		expect(errors).toEqual([]);
 		expect(thirdParty).toEqual([]);
@@ -193,21 +199,211 @@ test("mobile menu can close, reopen, navigate, and theme persists", async ({
 	});
 });
 
-test("production search finds the project and closes on a result", async ({
+async function openSearch(page: Page, mobile: boolean) {
+	if (mobile) {
+		await page.locator("#search-switch").click();
+		return page.locator('#search-panel input[type="search"]');
+	}
+	await page.locator(".top-app-bar__search-shell").click();
+	return page.locator("#search-input-desktop");
+}
+
+for (const width of [390, 1440]) {
+	test(`production search closes on selection and history at ${width}px`, async ({
+		page,
+	}) => {
+		await page.setViewportSize({ width, height: 1000 });
+		await page.goto("/");
+		await ready(page);
+		const panel = page.locator("#search-panel");
+		const input = await openSearch(page, width < 1024);
+		await input.fill("NekoKEM");
+		const result = panel.locator('a[href*="/posts/nekokem/"]').first();
+		await expect(result).toBeVisible();
+		await result.click();
+		await expect(page).toHaveURL(/\/posts\/nekokem\//);
+		await expect(page.locator("#swup-container h1").first()).toContainText(
+			"NekoKEM",
+		);
+		await expect(panel).toHaveClass(/float-panel-closed/);
+		await expect(panel).toHaveCSS("opacity", "0");
+		await ready(page);
+
+		// A same-page result may not start a Swup visit. Enter must still close it.
+		await openSearch(page, width < 1024);
+		await expect(panel).not.toHaveClass(/float-panel-closed/);
+		await expect(result).toBeVisible();
+		await result.press("Enter");
+		await expect(panel).toHaveClass(/float-panel-closed/);
+
+		const nextInput = await openSearch(page, width < 1024);
+		await nextInput.fill("LunexSU");
+		await panel.locator('a[href*="/posts/lunexsu/"]').first().press("Enter");
+		await expect(page).toHaveURL(/\/posts\/lunexsu\//);
+		await expect(page.locator("#swup-container h1").first()).toContainText(
+			"LunexSU",
+		);
+		await expect(panel).toHaveClass(/float-panel-closed/);
+		await ready(page);
+		await openSearch(page, width < 1024);
+		await expect(panel).not.toHaveClass(/float-panel-closed/);
+		await page.goBack();
+		await expect(page).toHaveURL(/\/posts\/nekokem\//);
+		await expect(page.locator("#swup-container h1").first()).toContainText(
+			"NekoKEM",
+		);
+		await expect(panel).toHaveClass(/float-panel-closed/);
+		await ready(page);
+		await openSearch(page, width < 1024);
+		await expect(panel).not.toHaveClass(/float-panel-closed/);
+		await page.goForward();
+		await expect(page).toHaveURL(/\/posts\/lunexsu\//);
+		await expect(panel).toHaveClass(/float-panel-closed/);
+	});
+}
+
+for (const width of [390, 1440]) {
+	test(`a pending search stays dismissed and can restart at ${width}px`, async ({
+		page,
+	}) => {
+		await page.setViewportSize({ width, height: 1000 });
+		await page.goto("/");
+		await ready(page);
+		const input = await openSearch(page, width < 1024);
+		await input.fill("NekoKEM");
+		const panel = page.locator("#search-panel");
+		const result = panel.locator('a[href*="/posts/nekokem/"]').first();
+		await expect(result).toBeVisible();
+		await page.evaluate(() => {
+			const state = window as Window & {
+				releaseSearch?: () => void;
+				searchPending?: boolean;
+				restorePagefind?: () => void;
+			};
+			if (!window.pagefind) throw new Error("Pagefind was not loaded");
+			const original = window.pagefind;
+			state.restorePagefind = () => {
+				window.pagefind = original;
+			};
+			window.pagefind = {
+				...window.pagefind,
+				search: () =>
+					new Promise((resolve) => {
+						state.searchPending = true;
+						state.releaseSearch = () =>
+							resolve({
+								results: [
+									{
+										data: async () => ({
+											url: "/posts/lunexsu/",
+											meta: { title: "Stale result" },
+											excerpt: "Stale result",
+										}),
+									},
+								],
+							});
+					}),
+			};
+		});
+		await input.fill("LunexSU");
+		await page.waitForFunction(
+			() => (window as Window & { searchPending?: boolean }).searchPending,
+		);
+		await result.click();
+		await expect(page).toHaveURL(/\/posts\/nekokem\//);
+		await ready(page);
+		await page.evaluate(async () => {
+			const release = (window as Window & { releaseSearch?: () => void })
+				.releaseSearch;
+			if (!release)
+				throw new Error("Search navigation replaced the persistent shell");
+			release();
+			// Allow both the search response and result-data microtasks to settle.
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+		await expect(panel).toHaveClass(/float-panel-closed/);
+		await expect(panel).not.toContainText("Stale result");
+		await page.evaluate(() =>
+			(window as Window & { restorePagefind?: () => void }).restorePagefind?.(),
+		);
+		await openSearch(page, width < 1024);
+		await expect(panel).not.toHaveClass(/float-panel-closed/);
+		await expect(
+			panel.locator('a[href*="/posts/lunexsu/"]').first(),
+		).toBeVisible();
+	});
+}
+
+test("late Pagefind initialization cannot restart a dismissed search", async ({
 	page,
 }) => {
-	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto("/");
 	await ready(page);
-	await page.locator("#search-switch").click();
-	await page.locator('#search-panel input[type="search"]').fill("NekoKEM");
-	const result = page
-		.locator('#search-panel a[href*="/posts/nekokem/"]')
-		.first();
-	await expect(result).toBeVisible();
-	await result.click();
-	await expect(page).toHaveURL(/\/posts\/nekokem\//);
+	const initialInput = await openSearch(page, false);
+	await initialInput.fill("NekoKEM");
+	await expect(
+		page.locator('#search-panel a[href*="/posts/nekokem/"]').first(),
+	).toBeVisible();
+	await page.locator('#navbar a[href="/about/"]').click();
+	await expect(page.locator("#swup-container")).toHaveAttribute(
+		"data-current-page",
+		"about",
+	);
+	await ready(page);
+	await page.evaluate(() => {
+		const state = window as Window & {
+			__loadPagefind?: () => Promise<unknown>;
+			releasePagefind?: () => void;
+			pagefindLoadCalls?: number;
+		};
+		window.pagefind = undefined;
+		const loading = new Promise((resolve) => {
+			state.releasePagefind = () => {
+				window.pagefind = {
+					search: async () => ({
+						results: [
+							{
+								data: async () => ({
+									url: "/posts/nekokem/",
+									meta: { title: "Late initialization" },
+									excerpt: "Late initialization",
+								}),
+							},
+						],
+					}),
+				};
+				document.dispatchEvent(new CustomEvent("pagefindready"));
+				resolve(window.pagefind);
+			};
+		});
+		state.__loadPagefind = () => {
+			state.pagefindLoadCalls = (state.pagefindLoadCalls ?? 0) + 1;
+			return loading;
+		};
+	});
+	const input = await openSearch(page, false);
+	await input.fill("NekoKEM");
+	await page.waitForFunction(
+		() =>
+			((window as Window & { pagefindLoadCalls?: number }).pagefindLoadCalls ??
+				0) >= 1,
+	);
+	await page.locator('#navbar a[href="/projects/"]').click();
+	await expect(page.locator("#swup-container")).toHaveAttribute(
+		"data-current-page",
+		"projects",
+	);
+	await page.evaluate(async () => {
+		const release = (window as Window & { releasePagefind?: () => void })
+			.releasePagefind;
+		if (!release) throw new Error("Navigation replaced the persistent shell");
+		release();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	});
 	await expect(page.locator("#search-panel")).toHaveClass(/float-panel-closed/);
+	await expect(page.locator("#search-panel")).not.toContainText(
+		"Late initialization",
+	);
 });
 
 test("reduced motion and secondary-page screenshots", async ({ page }) => {

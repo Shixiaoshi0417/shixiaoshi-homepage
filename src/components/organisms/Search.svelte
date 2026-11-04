@@ -15,6 +15,7 @@ let result: SearchResult[] = [];
 let isSearching = false;
 let pagefindLoaded = false;
 let initialized = false;
+let searchGeneration = 0;
 
 $: panelResults = result.map((r) => ({
 	url: r.url,
@@ -42,7 +43,13 @@ const fakeResult: SearchResult[] = [
 
 const togglePanel = () => {
 	const panel = document.getElementById("search-panel");
-	panel?.classList.toggle("float-panel-closed");
+	if (!panel) return;
+	if (panel.classList.contains("float-panel-closed")) {
+		panel.classList.remove("float-panel-closed");
+		void search(keywordMobile, false);
+	} else {
+		closePanel();
+	}
 };
 
 const setPanelVisibility = (show: boolean, isDesktop: boolean): void => {
@@ -56,7 +63,16 @@ const setPanelVisibility = (show: boolean, isDesktop: boolean): void => {
 	}
 };
 
+const closePanel = (): void => {
+	// The search island survives Swup navigation. Discard pending results so
+	// an older request cannot reopen the panel after a result was selected.
+	searchGeneration += 1;
+	isSearching = false;
+	setPanelVisibility(false, true);
+};
+
 const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
+	const generation = ++searchGeneration;
 	if (!keyword) {
 		setPanelVisibility(false, isDesktop);
 		result = [];
@@ -97,18 +113,23 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 			searchResults = fakeResult;
 		}
 
+		if (generation !== searchGeneration) return;
 		result = searchResults;
 		setPanelVisibility(result.length > 0, isDesktop);
 	} catch (error) {
+		if (generation !== searchGeneration) return;
 		console.error("Search error:", error);
 		result = [];
 		setPanelVisibility(false, isDesktop);
 	} finally {
-		isSearching = false;
+		if (generation === searchGeneration) isSearching = false;
 	}
 };
 
 onMount(() => {
+	document.addEventListener("swup:visit:start", closePanel);
+	document.addEventListener("swup:content:replace", closePanel);
+
 	const initializeSearch = () => {
 		initialized = true;
 		pagefindLoaded =
@@ -116,8 +137,17 @@ onMount(() => {
 			!!window.pagefind &&
 			typeof window.pagefind.search === "function";
 		console.log("Pagefind status on init:", pagefindLoaded);
-		if (keywordDesktop) search(keywordDesktop, true);
-		if (keywordMobile) search(keywordMobile, false);
+	};
+	const onPagefindReady = () => {
+		// The active search already awaits __loadPagefind. Do not start a new
+		// request here: a late load event may arrive after navigation dismissed it.
+		initializeSearch();
+	};
+	const onPagefindLoadError = () => {
+		console.warn(
+			"Pagefind load error event received. Search functionality will be limited.",
+		);
+		initializeSearch();
 	};
 
 	if (import.meta.env.DEV) {
@@ -126,18 +156,18 @@ onMount(() => {
 		);
 		initializeSearch();
 	} else {
-		document.addEventListener("pagefindready", () => {
-			console.log("Pagefind ready event received.");
-			initializeSearch();
-		});
-		document.addEventListener("pagefindloaderror", () => {
-			console.warn(
-				"Pagefind load error event received. Search functionality will be limited.",
-			);
-			initializeSearch();
-		});
+		document.addEventListener("pagefindready", onPagefindReady);
+		document.addEventListener("pagefindloaderror", onPagefindLoadError);
 		initializeSearch();
 	}
+
+	return () => {
+		searchGeneration += 1;
+		document.removeEventListener("swup:visit:start", closePanel);
+		document.removeEventListener("swup:content:replace", closePanel);
+		document.removeEventListener("pagefindready", onPagefindReady);
+		document.removeEventListener("pagefindloaderror", onPagefindLoadError);
+	};
 });
 
 $: if (initialized) {
@@ -160,7 +190,7 @@ $: if (initialized) {
     name="search-desktop"
     placeholder={i18n(I18nKey.search)}
     onfocus={() => search(keywordDesktop, true)}
-    oncollapse={() => setPanelVisibility(false, true)}
+    oncollapse={closePanel}
 />
 
 <!-- toggle btn for phone/tablet view -->
@@ -182,4 +212,5 @@ $: if (initialized) {
     results={panelResults}
     placeholder={i18n(I18nKey.search)}
     hideInputOnDesktop
+    onselect={closePanel}
 />
