@@ -49,7 +49,7 @@ pnpm test:personal
 
 ## 发布边界
 
-此分支没有部署操作，不修改 main、Cloudflare、DNS 或邮件路由。`wrangler.jsonc` 仅准备静态输出目录 `dist`，保留原 Worker 名称，禁用 preview URLs 与 observability；没有自动部署工作流。`robots.txt` 与响应头保留 noindex，正式上线前需单独审核。
+此分支没有部署操作，不修改 main、Cloudflare、DNS 或邮件路由。`wrangler.jsonc` 仅准备静态输出目录 `dist`，保留原 Worker 名称，禁用 preview URLs 与 observability；没有自动部署工作流。`robots.txt` 允许全站抓取并指向 `https://shixiaoshi0417.com/` 的 sitemap，响应头不再带 noindex。
 
 现有 Workers 测试地址只是沿用原仓库配置，本次未验证其线上状态；正式域名未绑定。若未来发布，先确认图片使用许可及域名，再单独执行获授权的部署。
 

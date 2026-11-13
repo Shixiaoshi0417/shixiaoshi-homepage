@@ -10,7 +10,7 @@ import { withUserConfig } from "../utils/config-overlay.ts";
  * 类型见 src/types/config.ts。
  */
 export const siteConfig: SiteConfig = withUserConfig("site", {
-	site: "https://shixiaoshi-homepage.shimaochen0417.workers.dev/",
+	site: "https://shixiaoshi0417.com/",
 	base: "/",
 	title: "石小石",
 	subtitle: "代码、日常，还有一些新想法。",

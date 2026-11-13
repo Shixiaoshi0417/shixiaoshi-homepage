@@ -23,7 +23,10 @@ test('identity, artwork and links are local and correct', async () => {
   assert.doesNotMatch(home, /https:\/\/(api\.iconify\.design|fonts\.googleapis\.com|fonts\.gstatic\.com|www\.googletagmanager\.com)/);
 });
 
-test('review builds remain noindex', async () => {
-  assert.match(await read('_headers'), /X-Robots-Tag: noindex, nofollow/);
-  assert.match(await read('robots.txt'), /Disallow:\s*\//);
+test('published site can be crawled and indexed', async () => {
+  assert.doesNotMatch(await read('_headers'), /X-Robots-Tag/i);
+  const robots = await read('robots.txt');
+  assert.doesNotMatch(robots, /^Disallow:/m);
+  assert.match(robots, /^Allow: \/$/m);
+  assert.match(robots, /^Sitemap: https:\/\/shixiaoshi0417\.com\/sitemap-index\.xml$/m);
 });

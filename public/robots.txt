@@ -1,3 +1,0 @@
-User-agent: *
-Disallow: /
-# Reconstruction preview: remove this restriction only when publication is approved.
