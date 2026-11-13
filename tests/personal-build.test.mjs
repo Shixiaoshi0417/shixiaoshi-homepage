@@ -28,5 +28,5 @@ test('published site can be crawled and indexed', async () => {
   const robots = await read('robots.txt');
   assert.doesNotMatch(robots, /^Disallow:/m);
   assert.match(robots, /^Allow: \/$/m);
-  assert.match(robots, /^Sitemap: https:\/\/shixiaoshi0417\.com\/sitemap-index\.xml$/m);
+  assert.match(robots, /^Sitemap: https:\/\/www\.shixiaoshi0417\.com\/sitemap-index\.xml$/m);
 });
